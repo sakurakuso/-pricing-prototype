@@ -1,0 +1,14 @@
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  margin: 20px;
+  background: #f8f9fb;
+  color: #222;
+}
+.container { max-width: 900px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.08);} 
+.field { margin-bottom: 12px; }
+.field label { display:block; font-weight:600; margin-bottom:6px; }
+input, select { width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; }
+button { padding:10px 16px; background:#1565c0; color:#fff; border:none; border-radius:6px; cursor:pointer;}
+.result { margin-top:20px; padding:12px; background:#f1f8ff; border-radius:6px;}
+.table { width:100%; border-collapse: collapse; margin-top:8px;}
+.table td, .table th { padding:8px; border:1px solid #eee; }
