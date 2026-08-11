@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Multi Timezone Digital Clock</title>
+  <style>
+    :root{
+      --bg:#0f1724;
+      --card:#0b1220;
+      --accent:#22c1c3;
+      --muted:#9aa7b1;
+      --glass: rgba(255,255,255,0.03);
+    }
+    html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;background:linear-gradient(180deg,#071026 0%, #0f1724 100%);color:#e6eef3}
+    .wrap{max-width:1000px;margin:32px auto;padding:20px;}
+    header{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+    header h1{font-size:20px;margin:0}
+    .controls{margin-left:auto;display:flex;gap:10px;align-items:center}
+    .card{background:linear-gradient(180deg,var(--card), #071021);border-radius:10px;padding:14px;box-shadow:0 6px 18px rgba(2,6,23,0.6);display:flex;flex-wrap:wrap;gap:12px}
+    .tz-card{background:var(--glass);border-radius:8px;padding:12px;min-width:200px;flex:1 1 220px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;border:1px solid rgba(255,255,255,0.04)}
+    .tz-header{display:flex;align-items:center;gap:8px;width:100%}
+    .tz-title{font-weight:600}
+    .tz-sub{font-size:12px;color:var(--muted)}
+    .time{font-size:28px;font-weight:700;color:var(--accent);letter-spacing:1px}
+    .date{font-size:12px;color:var(--muted)}
+    .actions{margin-left:auto}
+    button,select,input{background:transparent;border:1px solid rgba(255,255,255,0.06);color:inherit;padding:8px 10px;border-radius:8px}
+    input[type="text"]{min-width:180px}
+    .small{font-size:12px;padding:6px 8px}
+    footer{margin-top:14px;font-size:13px;color:var(--muted)}
+    @media (max-width:640px){.tz-card{min-width:100%}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Multi Timezone Digital Clock</h1>
+      <div class="controls">
+        <label style="display:flex;align-items:center;gap:8px">
+          <input id="toggle-24" type="checkbox" /> 24-hour
+        </label>
+        <select id="preset-zones" class="small" title="Add a preset timezone">
+          <option value="">Add preset timezone…</option>
+        </select>
+        <input id="custom-zone" type="text" placeholder="Add IANA timezone (e.g. Asia/Tokyo)" />
+        <button id="add-custom" class="small">Add</button>
+      </div>
+    </header>
+
+    <div class="card" id="zones-container">
+      <!-- timezone cards rendered here -->
+    </div>
+
+    <footer>
+      Tip: Time zone names should be IANA time zone identifiers (e.g. "America/New_York", "Europe/London"). Use the dropdown or type a timezone and click Add.
+    </footer>
+  </div>
+
+  <script>
+    // Common presets
+    const PRESETS = [
+      {label:'Local', tz: Intl.DateTimeFormat().resolvedOptions().timeZone},
+      {label:'UTC', tz:'UTC'},
+      {label:'New York (US/Eastern)', tz:'America/New_York'},
+      {label:'Los Angeles (US/Pacific)', tz:'America/Los_Angeles'},
+      {label:'London (UK)', tz:'Europe/London'},
+      {label:'Berlin (Germany)', tz:'Europe/Berlin'},
+      {label:'Paris (France)', tz:'Europe/Paris'},
+      {label:'Moscow (Russia)', tz:'Europe/Moscow'},
+      {label:'Dubai (UAE)', tz:'Asia/Dubai'},
+      {label:'Mumbai (India)', tz:'Asia/Kolkata'},
+      {label:'Shanghai (China)', tz:'Asia/Shanghai'},
+      {label:'Tokyo (Japan)', tz:'Asia/Tokyo'},
+      {label:'Sydney (Australia)', tz:'Australia/Sydney'},
+      {label:'São Paulo (Brazil)', tz:'America/Sao_Paulo'},
+      {label:'Johannesburg (South Africa)', tz:'Africa/Johannesburg'}
+    ];
+
+    const container = document.getElementById('zones-container');
+    const presetSelect = document.getElementById('preset-zones');
+    const addCustomBtn = document.getElementById('add-custom');
+    const customInput = document.getElementById('custom-zone');
+    const toggle24 = document.getElementById('toggle-24');
+
+    // Populate preset dropdown
+    PRESETS.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.tz;
+      opt.textContent = `${p.label} — ${p.tz}`;
+      presetSelect.appendChild(opt);
+    });
+
+    // Maintain list of displayed zones
+    const zones = new Map(); // tz -> element
+
+    function createZoneCard(tz, title) {
+      if (zones.has(tz)) return; // already added
+      const card = document.createElement('div');
+      card.className = 'tz-card';
+      const header = document.createElement('div'); header.className = 'tz-header';
+      const titleEl = document.createElement('div'); titleEl.className = 'tz-title'; titleEl.textContent = title || tz;
+      const subEl = document.createElement('div'); subEl.className = 'tz-sub'; subEl.textContent = tz;
+      const actions = document.createElement('div'); actions.className = 'actions';
+      const removeBtn = document.createElement('button'); removeBtn.textContent = 'Remove'; removeBtn.className='small';
+      removeBtn.addEventListener('click', ()=> { zones.delete(tz); card.remove(); saveState(); });
+      actions.appendChild(removeBtn);
+      header.appendChild(titleEl);
+      header.appendChild(actions);
+
+      const timeEl = document.createElement('div'); timeEl.className = 'time'; timeEl.textContent = '--:--:--';
+      const dateEl = document.createElement('div'); dateEl.className = 'date'; dateEl.textContent = '';
+
+      card.appendChild(header);
+      card.appendChild(subEl);
+      card.appendChild(timeEl);
+      card.appendChild(dateEl);
+
+      container.appendChild(card);
+      zones.set(tz, {card, timeEl, dateEl, titleEl, subEl});
+      saveState();
+    }
+
+    function updateClock() {
+      const is24 = toggle24.checked;
+      const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: !is24 };
+      const dateOptions = { weekday:'short', year:'numeric', month:'short', day:'numeric' };
+      zones.forEach((el, tz) => {
+        try {
+          const now = new Date();
+          const timeStr = new Intl.DateTimeFormat([], {...timeOptions, timeZone: tz}).format(now);
+          const dateStr = new Intl.DateTimeFormat([], {...dateOptions, timeZone: tz}).format(now);
+          el.timeEl.textContent = timeStr;
+          el.dateEl.textContent = dateStr;
+        } catch (e) {
+          // invalid timezone: show error
+          el.timeEl.textContent = 'Invalid timezone';
+          el.dateEl.textContent = '';
+        }
+      });
+    }
+
+    // Persistence: save list of zones to localStorage
+    function saveState() {
+      const arr = Array.from(zones.keys());
+      try { localStorage.setItem('multi-tz-zones', JSON.stringify(arr)); } catch(e){}
+    }
+    function loadState() {
+      let arr = [];
+      try { arr = JSON.parse(localStorage.getItem('multi-tz-zones') || 'null') || []; } catch(e){ arr = [] }
+      if (arr.length === 0) {
+        // default set
+        PRESETS.slice(0,5).forEach(p => createZoneCard(p.tz, p.label));
+      } else {
+        arr.forEach(tz => createZoneCard(tz));
+      }
+    }
+
+    // Event handlers
+    presetSelect.addEventListener('change', ()=> {
+      const tz = presetSelect.value;
+      if (tz) createZoneCard(tz, PRESETS.find(p=>p.tz===tz)?.label || tz);
+      presetSelect.selectedIndex = 0;
+    });
+    addCustomBtn.addEventListener('click', ()=> {
+      const tz = customInput.value.trim();
+      if (!tz) return;
+      createZoneCard(tz);
+      customInput.value = '';
+    });
+    toggle24.addEventListener('change', updateClock);
+
+    // initialize
+    loadState();
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // Expose helper to add some initial zones quickly (optional)
+    window.addTimezone = createZoneCard;
+  </script>
+</body>
+</html>
